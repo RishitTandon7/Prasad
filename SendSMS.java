@@ -1,41 +1,50 @@
 import com.twilio.Twilio;
 import com.twilio.rest.api.v2010.account.Message;
 import com.twilio.type.PhoneNumber;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 
-import java.util.HashMap;
-import java.util.Map;
-
+/** Reads temples and subscribers from MySQL and sends each subscriber the food schedule. */
 public class SendSMS {
-    public static final String ACCOUNT_SID = "ACe893791947ad2e25cd713157dabf4d8e";
-    public static final String AUTH_TOKEN = "b9ec5ca6ed9832c1361fb7df0003d8f7";
+    public static void main(String[] args) throws SQLException {
+        String sid = System.getenv("TWILIO_ACCOUNT_SID");
+        String token = System.getenv("TWILIO_AUTH_TOKEN");
+        String from = System.getenv("TWILIO_PHONE_NUMBER");
+        if (sid == null || token == null || from == null) {
+            System.err.println("Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER first.");
+            return;
+        }
+        Twilio.init(sid, token);
 
-    public static void main(String[] args) {
-        Twilio.init(ACCOUNT_SID, AUTH_TOKEN);
-
-        // Define temples and their location links and food serving details
-        Map<String, String> temples = new HashMap<>();
-        temples.put("Shiva Temple", "https://maps.app.goo.gl/6j2GoTjRcfnQXDnh8, Food served on Mondays and Thursdays.");
-        temples.put("Ganesh Temple", "https://maps.app.goo.gl/cudUHsTXSdWhnHsK8, Food served on Wednesdays and Fridays.");
-        temples.put("Vishnu Temple", "https://maps.app.goo.gl/1ktN7TnjP3YrXQVQ9, Food served on Sundays and Tuesdays.");
-
-        // Send the list of temples with details
-        sendTempleDetails(temples);
+        try (Connection conn = Db.connect(); Statement st = conn.createStatement()) {
+            String body = buildMessage(st);
+            try (ResultSet rs = st.executeQuery("SELECT phone, channel FROM subscribers")) {
+                int sent = 0;
+                while (rs.next()) {
+                    String to = rs.getString("phone");
+                    boolean whatsapp = "WHATSAPP".equals(rs.getString("channel"));
+                    Message.creator(
+                            new PhoneNumber(whatsapp ? "whatsapp:" + to : to),
+                            new PhoneNumber(whatsapp ? "whatsapp:" + from : from),
+                            body).create();
+                    sent++;
+                }
+                System.out.println("Sent temple schedule to " + sent + " subscribers.");
+            }
+        }
     }
 
-    private static void sendTempleDetails(Map<String, String> temples) {
-        StringBuilder messageBody = new StringBuilder("\n List of temples with location links and food serving details:\n\n");
-        for (Map.Entry<String, String> entry : temples.entrySet()) {
-            String[] details = entry.getValue().split(", ");
-            messageBody.append(entry.getKey()).append(":\n")
-                    .append("Location: ").append(details[0]).append("\n")
-                    .append("Food served on: ").append(details[1]).append("\n\n");
+    private static String buildMessage(Statement st) throws SQLException {
+        StringBuilder sb = new StringBuilder("Temples serving food:\n\n");
+        try (ResultSet rs = st.executeQuery("SELECT name, location_url, food_days FROM temples ORDER BY name")) {
+            while (rs.next()) {
+                sb.append(rs.getString("name")).append('\n')
+                  .append("Location: ").append(rs.getString("location_url")).append('\n')
+                  .append("Food served: ").append(rs.getString("food_days")).append("\n\n");
+            }
         }
-
-        Message message = Message
-                .creator(new PhoneNumber("+917394865520"),//User Number
-                        new PhoneNumber("+12678734365"),//Twilio number
-                        messageBody.toString())
-                .create();
-        System.out.println("Temple details sent: " + message.getSid());
+        return sb.toString();
     }
 }
