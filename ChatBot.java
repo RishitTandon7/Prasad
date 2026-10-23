@@ -10,8 +10,8 @@ import static spark.Spark.*;
 public class ChatBot {
 
     // Your Twilio Account SID and Auth Token
-    public static final String ACCOUNT_SID = System.getenv("TWILIO_ACCOUNT_SID_WP");
-    public static final String AUTH_TOKEN = System.getenv("TWILIO_AUTH_TOKEN_WP");
+    public static final String ACCOUNT_SID = System.getenv("TWILIO_ACCOUNT_SID");
+    public static final String AUTH_TOKEN = System.getenv("TWILIO_AUTH_TOKEN");
     public static void main(String[] args) {
         // Initialize Twilio
         Twilio.init(ACCOUNT_SID, AUTH_TOKEN);
@@ -30,7 +30,7 @@ public class ChatBot {
             // Create a Twilio Message object to send a response
             Message.creator(
                 new PhoneNumber(from), // To number
-                new PhoneNumber("your_twilio_number"), // From number
+                new PhoneNumber("whatsapp:" + System.getenv("TWILIO_PHONE_NUMBER")), // From number
                 responseMessage // Message content
             ).create();
             
